@@ -26,8 +26,8 @@ st.subheader("Traffic Dataset Preview")
 st.dataframe(df.head())
 
 # Extract dataset metrics
-avg_wait = df["avg_waiting_time"].mean()
-avg_queue = df["queue_length"].mean()
+avg_wait = df["waiting_time"].mean()
+avg_queue = df["vehicle_count"].mean()
 
 # -------------------------------
 # GA Parameters (Sidebar)
@@ -48,12 +48,12 @@ RED_RANGE = (10, 60)
 # -------------------------------
 # Fitness Function
 # -------------------------------
-def fitness_function(avg_wait, queue_length):
+def fitness_function(avg_wait, vehicle_count):
     """
     Single-objective fitness
     Lower is better
     """
-    return 0.6 * avg_wait + 0.4 * queue_length
+    return 0.6 * avg_wait + 0.4 * vehicle_count
 
 # -------------------------------
 # GA Operators

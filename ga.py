@@ -1,135 +1,107 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import random
-import matplotlib.pyplot as plt
+import time
 
-# -------------------------------
-# Streamlit Page Config
-# -------------------------------
-st.set_page_config(
-    page_title="Traffic Light Optimization (GA)",
-    layout="wide"
-)
+st.title("Traffic Light Optimization using Genetic Algorithm")
 
-st.title("🚦 Traffic Light Optimization using Genetic Algorithm")
+# Load dataset
+data = pd.read_csv("traffic_dataset.csv")
 
-# -------------------------------
-# Load Dataset
-# -------------------------------
-@st.cache_data
-def load_data():
-    return pd.read_csv("traffic_dataset.csv")
+st.subheader("Dataset Preview")
+st.dataframe(data.head())
 
-df = load_data()
+#------
+#------
+def fitness_function(green_times, traffic_data):
+    avg_wait = traffic_data["waiting_time"].mean()
+    queue = traffic_data["vehicle_count"].mean()
 
-st.subheader("Traffic Dataset Preview")
-st.dataframe(df.head())
+    penalty = 0
+    if sum(green_times) > 180:
+        penalty += 100
 
-# Extract dataset metrics
-avg_wait = df["waiting_time"].mean()
-avg_queue = df["vehicle_count"].mean()
+    fitness = avg_wait + queue + penalty
+    return fitness
+#-------
+#-------
 
-# -------------------------------
-# GA Parameters (Sidebar)
-# -------------------------------
-st.sidebar.header("Genetic Algorithm Parameters")
-
-POP_SIZE = st.sidebar.slider("Population Size", 10, 100, 30)
-GENERATIONS = st.sidebar.slider("Generations", 10, 200, 50)
-MUTATION_RATE = st.sidebar.slider("Mutation Rate", 0.01, 0.5, 0.1)
-
-# -------------------------------
-# Traffic Signal Constraints
-# -------------------------------
-GREEN_RANGE = (10, 60)
-YELLOW_RANGE = (3, 6)
-RED_RANGE = (10, 60)
-
-# -------------------------------
-# Fitness Function
-# -------------------------------
-def fitness_function(avg_wait, vehicle_count):
-    """
-    Single-objective fitness
-    Lower is better
-    """
-    return 0.6 * avg_wait + 0.4 * vehicle_count
-
-# -------------------------------
-# GA Operators
-# -------------------------------
-def create_chromosome():
-    return [
-        random.randint(*GREEN_RANGE),
-        random.randint(*YELLOW_RANGE),
-        random.randint(*RED_RANGE)
-    ]
+def initialize_population(pop_size, phases):
+    return [np.random.randint(10, 60, phases).tolist() for _ in range(pop_size)]
 
 def crossover(parent1, parent2):
-    point = random.randint(1, 2)
+    point = random.randint(1, len(parent1)-1)
     return parent1[:point] + parent2[point:]
 
-def mutate(chromosome):
-    if random.random() < MUTATION_RATE:
-        idx = random.randint(0, 2)
-        chromosome[idx] += random.randint(-3, 3)
+def mutation(chromosome, rate=0.1):
+    for i in range(len(chromosome)):
+        if random.random() < rate:
+            chromosome[i] = random.randint(10, 60)
     return chromosome
 
-# -------------------------------
-# Run Genetic Algorithm
-# -------------------------------
-def run_ga():
-    population = [create_chromosome() for _ in range(POP_SIZE)]
-    best_fitness_history = []
 
-    for _ in range(GENERATIONS):
-        fitness_scores = [
-            fitness_function(avg_wait, avg_queue)
-            for _ in population
-        ]
+#-------
+#-------
+def genetic_algorithm(generations, pop_size, phases):
+    population = initialize_population(pop_size, phases)
+    best_fitness = []
+    
+    for gen in range(generations):
+        scored = [(fitness_function(ind, data), ind) for ind in population]
+        scored.sort(key=lambda x: x[0])
+        population = [x[1] for x in scored[:pop_size//2]]
 
-        best_fitness_history.append(min(fitness_scores))
-
-        # Selection (elitism)
-        selected = sorted(
-            zip(population, fitness_scores),
-            key=lambda x: x[1]
-        )[:POP_SIZE // 2]
-
-        new_population = [p for p, _ in selected]
-
-        while len(new_population) < POP_SIZE:
-            p1, p2 = random.sample(new_population, 2)
+        while len(population) < pop_size:
+            p1, p2 = random.sample(population[:10], 2)
             child = crossover(p1, p2)
-            child = mutate(child)
-            new_population.append(child)
+            population.append(mutation(child))
 
-        population = new_population
+        best_fitness.append(scored[0][0])
 
-    return population[0], best_fitness_history
+    return best_fitness, scored[0][1]
 
-# -------------------------------
-# Run Button
-# -------------------------------
+#------
+#------
+st.subheader("GA Parameter Settings")
+
+generations = st.slider("Generations", 10, 200, 50)
+population = st.slider("Population Size", 10, 100, 30)
+
 if st.button("Run Genetic Algorithm"):
-    best_solution, fitness_history = run_ga()
+    start = time.time()
+    fitness_curve, best_solution = genetic_algorithm(generations, population, 4)
+    end = time.time()
 
-    col1, col2 = st.columns(2)
+    st.success("Optimization Completed")
+    st.write("Best Green Time Plan:", best_solution)
+    st.write("Execution Time (s):", round(end-start, 3))
 
-    with col1:
-        st.subheader("Optimized Traffic Signal Timing")
-        st.metric("Green Time (seconds)", best_solution[0])
-        st.metric("Yellow Time (seconds)", best_solution[1])
-        st.metric("Red Time (seconds)", best_solution[2])
+    st.line_chart(fitness_curve)
+#------
+#------
 
-    with col2:
-        st.subheader("GA Convergence Curve")
-        fig, ax = plt.subplots()
-        ax.plot(fitness_history)
-        ax.set_xlabel("Generation")
-        ax.set_ylabel("Best Fitness")
-        ax.set_title("Genetic Algorithm Convergence")
-        st.pyplot(fig)
+def multi_objective_fitness(green_times, traffic_data):
+    wait = traffic_data["waiting_time"].mean()
+    queue = traffic_data["vehicle_count"].mean()
+    cycle = sum(green_times)
 
-st.markdown("---")
-st.caption("Traffic Light Optimization using Genetic Algorithm (GA)")
+    return (0.5 * wait) + (0.3 * queue) + (0.2 * cycle)
+
+#-----
+#------
+
+st.subheader("Objective Trade-Off Analysis")
+
+results = []
+for _ in range(20):
+    sol = np.random.randint(10, 60, 4)
+    results.append({
+        "Waiting Time": data["waiting_time"].mean(),
+        "Queue Length": data["vehicle_count"].mean(),
+        "Cycle Time": sum(sol)
+    })
+
+df_results = pd.DataFrame(results)
+st.scatter_chart(df_results)
+

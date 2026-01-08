@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 st.title("🚦 Traffic Light Optimization using Genetic Algorithm")
-st.write("Computational Evolution Case Study")
+st.write("JIE42903 – Evolutionary Computing")
 
 # -------------------------------
 # Load Dataset
